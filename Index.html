@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lecture Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+
+<!-- The new jsDelivr link for Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+<style>
+  :root{
+    --bg:#12151a; --surface:#1a1e26; --surface-2:#20242e; --line:#2a2f3a;
+    --text:#ECEAE2; --muted:#8b93a1; --muted-2:#5f6673;
+    --chem:#4FB0A5; --phys:#9B8FE0; --math:#E0A458; --bio:#7FB069; --other:#C97B63;
+    --g0:#1c212a; --g1:#1f5c3a; --g2:#3fae66; --g3:#6be08a;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}
+
+  /* Layout */
+  .app{display:flex;min-height:100vh;}
+  .sidebar{
+    width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--line);
+    padding:22px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:4px;
+  }
+  .brand{font-family:'Fraunces',serif;font-weight:600;font-size:19px;padding:4px 10px 20px;}
+  .nav-item{
+    display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;
+    color:var(--muted);font-size:14px;font-weight:600;cursor:pointer;background:none;border:none;
+    width:100%;text-align:left;font-family:'Inter',sans-serif;
+  }
+  .nav-item:hover{background:var(--surface-2);color:var(--text);}
+  .nav-item.active{background:var(--surface-2);color:var(--text);}
+  .nav-icon{width:18px;text-align:center;}
+
+  .main{flex:1;min-width:0;padding:28px 28px 80px;max-width:1100px;}
+  .page{display:none;}
+  .page.active{display:block;}
+
+  header.top{margin-bottom:24px;}
+  h1{font-family:'Fraunces',serif;font-weight:600;font-size:30px;margin:0 0 6px;letter-spacing:-0.01em;}
+  .sub{color:var(--muted);font-size:14.5px;max-width:60ch;}
+
+  /* Dashboard grid */
+  .dash-grid{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px;}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px; margin-bottom: 16px;}
+  .card h3{font-family:'Fraunces',serif;font-size:16px;font-weight:600;margin:0 0 12px;}
+  .card-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+
+  /* Widget: time/weather/calendar */
+  .widget-clock{font-family:'IBM Plex Mono',monospace;font-size:32px;font-weight:600;}
+  .widget-date{color:var(--muted);font-size:13px;margin-top:2px;}
+  .weather-row{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:14px;color:var(--muted);}
+  .weather-icon{font-size:22px;}
+  .mini-cal{margin-top:16px;}
+  .mini-cal-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted-2);margin-bottom:8px;}
+  .mini-cal-head span:not(.cal-nav-btn){font-weight:600;color:var(--text);font-size:13px;}
+  .cal-nav-btn{background:var(--surface-2);border:1px solid var(--line);color:var(--muted);width:22px;height:22px;border-radius:6px;cursor:pointer;font-size:13px;line-height:1;}
+  .cal-nav-btn:hover{color:var(--text);border-color:#454c5c;}
+  .mini-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
+  .mini-cal-grid span{font-size:11px;text-align:center;color:var(--muted-2);}
+  .mini-cal-grid .day{
+    aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+    border-radius:5px;font-size:11px;color:var(--muted);cursor:pointer;position:relative;
+  }
+  .mini-cal-grid .day:hover{background:var(--surface-2);}
+  .mini-cal-grid .day.today{background:var(--chem);color:#0d1210;font-weight:700;}
+  .mini-cal-grid .day.sunday{color:#e2726c;}
+  .mini-cal-grid .day.today.sunday{color:#0d1210;}
+  .mini-cal-grid .day.holiday{box-shadow:0 2px 0 var(--math);}
+  .mini-cal-grid .day.has-note{box-shadow:0 2px 0 var(--chem);}
+  .mini-cal-grid .day.holiday.has-note{box-shadow:0 2px 0 var(--math), 0 5px 0 var(--chem);}
+  .cal-today-btn{
+    width:100%;margin-top:10px;background:var(--surface-2);border:1px solid var(--line);color:var(--muted);
+    font-size:12px;font-weight:600;padding:6px;border-radius:6px;cursor:pointer;
+  }
+  .cal-today-btn:hover{color:var(--text);}
+  .cal-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:10.5px;color:var(--muted-2);}
+  .cal-legend span{display:flex;align-items:center;gap:4px;}
+  .cal-swatch{width:16px;height:2px;display:inline-block;}
+  .cal-swatch-holiday{background:var(--math);}
+  .cal-swatch-note{background:var(--chem);}
+  .cal-swatch-sun{width:9px;height:9px;border-radius:50%;background:#e2726c;}
+
+  /* Streak stats */
+  .stat-row{display:flex;gap:14px;}
+  .stat-box{flex:1;background:var(--surface-2);border-radius:9px;padding:12px;text-align:center;}
+  .stat-num{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;}
+  .stat-label{font-size:11px;color:var(--muted-2);margin-top:2px;}
+
+  /* Heatmap */
+  .heatmap-scroll{overflow-x:auto;padding-bottom:4px;}
+  .heatmap-grid{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,12px);gap:3px;}
+  .hm-cell{width:12px;height:12px;border-radius:3px;background:var(--g0);}
+  .hm-legend{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted-2);margin-top:10px;}
+  .hm-legend .hm-cell{width:10px;height:10px;}
+
+  /* Donuts */
+  .donut-wrap{display:flex;align-items:flex-start;gap:20px; flex-wrap:wrap;}
+  .donut-box{display:flex;flex-direction:column;align-items:center;gap:8px;}
+  .donut-title{font-size:12px;color:var(--muted);font-weight:600;}
+  .donut-legend{flex:1;display:flex;flex-direction:column;gap:8px; min-width:120px;}
+  .donut-legend-row{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);}
+  .legend-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+
+  /* Chart toggle */
+  .toggle-btns{display:flex;gap:6px;}
+  .toggle-btns button{
+    background:var(--surface-2);border:1px solid var(--line);color:var(--muted);
+    font-size:12px;font-weight:600;padding:5px 10px;border-radius:6px;cursor:pointer;
+  }
+  .toggle-btns button.active{background:var(--chem);color:#0d1210;border-color:var(--chem);}
+
+  /* Settings */
+  .pref-row{margin-bottom:12px;}
+  .pref-block{margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--line);}
+  .pref-block:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0;}
+  .pref-block-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .pref-subject-name{font-family:'Fraunces',serif;font-size:15px;font-weight:600;}
+  .pref-count{color:var(--muted-2);font-size:11.5px;margin-left:2px;}
+  .pref-quick{
+    margin-left:auto;background:none;border:none;color:var(--muted-2);font-size:11.5px;
+    text-decoration:underline;cursor:pointer;padding:0;font-weight:600;
+  }
+  .pref-quick:hover{color:var(--text);}
+  .pref-pills{display:flex;flex-wrap:wrap;gap:8px;}
+  .pref-pill{
+    font-family:'Inter',sans-serif;font-size:12.5px;font-weight:600;
+    padding:7px 13px;border-radius:999px;cursor:pointer;
+    background:var(--surface-2);border:1px solid var(--line);color:var(--muted);
+    transition:background .15s ease, border-color .15s ease, color .15s ease;
+  }
+  .pref-pill:hover{border-color:#454c5c;color:var(--text);}
+  .pref-pill.on{color:#0d1210;font-weight:700;}
+  select{
+    width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:7px;
+    color:var(--text);font-family:'Inter',sans-serif;font-size:13px;padding:7px 9px;
+  }
+  
+  /* To-do widget */
+  .todo-section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted-2);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--line);}
+  .todo-empty{color:var(--muted-2);font-size:12.5px;padding:6px 0;}
+  .todo-item{margin-bottom:10px;}
+  .todo-row{display:flex;align-items:center;gap:9px;}
+  .todo-check{
+    width:18px;height:18px;border-radius:5px;border:1.5px solid var(--line);background:var(--surface-2);
+    flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;color:transparent;
+  }
+  .todo-check:hover{border-color:var(--chem);}
+  .todo-check.done{background:var(--chem);border-color:var(--chem);color:#0d1210;}
+  
+  /* FIXED: Text no longer fills row, strikethrough styling added */
+  .todo-text{font-size:13.5px;position:relative;}
+  .todo-text.cut{color:var(--muted-2);text-decoration:line-through;}
+  
+  .todo-text .strike-line{
+    position:absolute;left:0;top:50%;height:2px;background:var(--chem);width:0;
+    animation:strikeGrow .45s cubic-bezier(.2,.9,.3,1) forwards;
+  }
+  .todo-text .scissors{position:absolute;top:50%;left:0;transform:translate(-50%,-60%);font-size:13px;animation:scissorsMove .45s ease forwards;}
+  @keyframes strikeGrow{ to{ width:100%; } }
+  @keyframes scissorsMove{ from{ left:0; opacity:1; } to{ left:100%; opacity:0; } }
+  
+  /* FIXED: Push delete button to far right */
+  .todo-del{background:none;border:none;color:var(--muted-2);cursor:pointer;font-size:13px;padding:2px 4px;flex-shrink:0; margin-left:auto;}
+  .todo-del:hover{color:#c96a63;}
+  
+  .todo-subs{margin:6px 0 0 27px;}
+  .todo-sub-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .todo-sub-row .todo-check{width:15px;height:15px;font-size:10px;}
+  .todo-sub-row .todo-text{font-size:12.5px;}
+  .todo-add-sub{
+    margin:4px 0 0 27px;background:none;border:none;color:var(--muted-2);font-size:11.5px;
+    cursor:pointer;text-decoration:underline;padding:0;
+  }
+  .todo-add-sub:hover{color:var(--text);}
+  .todo-sub-input{
+    margin:6px 0 0 27px;width:calc(100% - 27px);background:var(--surface-2);border:1px solid var(--line);
+    border-radius:6px;color:var(--text);font-size:12.5px;padding:6px 9px;
+  }
+
+  /* Library page */
+  .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:18px;position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:5;border-bottom:1px solid var(--line);}
+  .toolbar input[type=text]{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:7px;color:var(--text);font-family:'Inter',sans-serif;font-size:13.5px;padding:8px 10px;}
+  .breadcrumb{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:18px;font-size:13.5px;color:var(--muted);}
+  .breadcrumb span.sep{color:var(--muted-2);margin:0 2px;}
+  .breadcrumb button{background:none;border:none;padding:2px 4px;color:var(--muted);font-weight:600;font-size:13.5px;cursor:pointer;}
+  .breadcrumb button:hover{color:var(--text);text-decoration:underline;}
+  .breadcrumb button.current{color:var(--text);cursor:default;text-decoration:none;}
+  .tile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;}
+  .tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:6px;color:var(--text);}
+  .tile:hover{border-color:#454c5c;}
+  .tile-top{display:flex;align-items:center;gap:8px;}
+  .tile-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .tile-title{font-family:'Fraunces',serif;font-size:17px;font-weight:600;}
+  .tile-meta{color:var(--muted-2);font-size:12.5px;}
+  .tile-arrow{margin-left:auto;color:var(--muted-2);font-size:15px;}
+  
+  .lecture-card{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:14px 16px;margin-bottom:8px;display:flex; flex-wrap:wrap; gap:14px;}
+  .lec-top{display:flex; gap:14px; align-items:flex-start; width:100%;}
+  .lec-no{font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;color:var(--muted);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:4px 8px;flex-shrink:0;margin-top:1px;white-space:nowrap;}
+  .lec-body{flex:1;min-width:0;}
+  .lec-title{font-size:15px;font-weight:600;margin-bottom:3px;}
+  .lec-meta{color:var(--muted-2);font-size:12.5px;margin-bottom:10px;}
+  .lec-links{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .lec-links a, .lec-links button, .lec-links span{font-size:12.5px;font-weight:600;text-decoration:none;padding:5px 10px;border-radius:6px;border:1px solid var(--line);display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-family:'Inter',sans-serif;background:none;}
+  
+  .link-YouTube{color:#ff6666;border-color:#3a2222;}
+  .link-YouTube:hover{background:#241717;}
+  .link-Notes{color:var(--chem);border-color:#1d3634;}
+  .link-Notes:hover{background:#152220;}
+  .link-DPP{color:var(--math);border-color:#3a2f1c;}
+  .link-DPP:hover{background:#241d10;}
+  .link-Module{color:var(--phys);border-color:#2a2540;}
+  .link-Module:hover{background:#1c1830;}
+
+  /* Generic dimmed/disabled state — applies over whichever colored type class the button also has */
+  .lec-links .unavailable{
+    color:var(--muted-2) !important;
+    border-color:var(--line) !important;
+    background:transparent !important;
+    opacity:0.5;
+    cursor:default;
+  }
+  .lec-links .unavailable:hover{background:transparent !important;}
+
+  .link-Watched{color:var(--muted);border-color:var(--line);margin-left:auto;}
+  .link-Watched:hover{background:var(--surface-2);color:var(--text);}
+  .link-Watched.done{color:var(--g2);border-color:#1f5c3a;background:rgba(63,174,102,0.08);}
+  
+  .watch-btn{
+    font-size:12px;font-weight:600;padding:5px 10px;border-radius:6px;cursor:pointer;
+    background:var(--surface-2);border:1px solid var(--line);color:var(--muted);flex-shrink:0;
+  }
+  .watch-btn.done{background:var(--g2);color:#0d1210;border-color:var(--g2);}
+  .search-meta{font-size:12.5px;color:var(--muted-2);margin-bottom:6px;}
+  .empty{text-align:center;color:var(--muted-2);padding:50px 20px;font-size:14px;}
+  .empty .big{font-family:'Fraunces',serif;font-size:19px;color:var(--muted);margin-bottom:6px;}
+  .loading{color:var(--muted-2);font-size:13.5px;padding:20px 0;}
+  .error-box{color:#ff6666;background:#241717;padding:15px;border-radius:8px;border:1px solid #3a2222;text-align:left;}
+
+  /* About / Contact */
+  .prose{max-width:60ch;color:var(--muted);font-size:14.5px;}
+  .prose p{margin:0 0 14px;}
+  .contact-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px;max-width:420px;}
+  .contact-card a{color:var(--chem);font-weight:600;text-decoration:none;}
+
+  @media (max-width:900px){
+    .dash-grid{grid-template-columns:1fr;}
+  }
+  @media (max-width:700px){
+    .app{flex-direction:column;}
+    .sidebar{width:100%;height:auto;position:relative;flex-direction:row;overflow-x:auto;padding:10px;}
+    .brand{display:none;}
+    .nav-item{white-space:nowrap;}
+    .main{padding:20px 16px 60px;}
+  }
+
+  /* --- Date Modal Fixes --- */
+  #dateModal {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(18, 21, 26, 0.7);
+    backdrop-filter: blur(3px);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  #dateModal:not(.hidden) {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .video-modal-inner {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px;
+    width: 90%;
+    max-width: 360px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    transform: translateY(30px);
+    transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+  #dateModal:not(.hidden) .video-modal-inner {
+    transform: translateY(0);
+  }
+  .video-modal-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+    font-weight: 600;
+    font-family: 'Fraunces', serif;
+    font-size: 17px;
+  }
+  .icon-btn {
+    background: transparent; border: none;
+    color: var(--muted); cursor: pointer;
+    font-size: 16px; padding: 4px;
+  }
+  .icon-btn:hover { color: var(--text); }
+  
+  /* FIXED: Restored Textarea Styles */
+  #dateModal textarea {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 13.5px;
+    padding: 10px;
+    resize: vertical;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease;
+  }
+  #dateModal textarea:focus {
+    outline: none;
+    border-color: var(--chem);
+  }
+
+  /* Buttons UI Fix */
+  .row-actions { display: flex; gap: 10px; margin-top: 16px; }
+  .btn-primary {
+    background: var(--chem); color: #0d1210; border: none;
+    padding: 8px 16px; border-radius: 7px; font-weight: 600;
+    cursor: pointer; font-size: 13px; flex: 1;
+  }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-ghost {
+    background: transparent; color: #e2726c; 
+    border: 1px solid var(--line);
+    padding: 8px 16px; border-radius: 7px; font-weight: 600;
+    cursor: pointer; font-size: 13px;
+  }
+  .btn-ghost:hover { background: #2a1b1b; border-color: #e2726c; }
+
+  /* Add Icon on Hover for Calendar Days */
+  .day-add-icon {
+    position: absolute;
+    top: -4px; right: -4px;
+    background: var(--chem);
+    color: #0d1210;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    font-size: 12px; line-height: 14px;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    font-weight: bold;
+  }
+  .mini-cal-grid .day:hover .day-add-icon {
+    opacity: 1;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <nav class="sidebar">
+    <div class="brand">📚 Lecture Hub</div>
+    <button class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')"><span class="nav-icon">🏠</span>Dashboard</button>
+    <button class="nav-item" data-page="library" onclick="showPage('library')"><span class="nav-icon">📖</span>Lecture Library</button>
+    <button class="nav-item" data-page="about" onclick="showPage('about')"><span class="nav-icon">ℹ️</span>About Me</button>
+    <button class="nav-item" data-page="contact" onclick="showPage('contact')"><span class="nav-icon">✉️</span>Contact</button>
+  </nav>
+
+  <main class="main">
+
+    <!-- DASHBOARD -->
+    <section class="page active" id="page-dashboard">
+      <header class="top">
+        <h1>Dashboard</h1>
+        <div class="sub">Your lecture-watching activity, streaks, and progress.</div>
+      </header>
+
+      <div class="dash-grid" style="margin-bottom: 0;">
+        <div class="card">
+          <h3>Activity</h3>
+          <div class="stat-row" style="margin-bottom:16px;">
+            <div class="stat-box"><div class="stat-num" id="statStreak">0</div><div class="stat-label">current streak</div></div>
+            <div class="stat-box"><div class="stat-num" id="statBest">0</div><div class="stat-label">best streak</div></div>
+            <div class="stat-box"><div class="stat-num" id="statToday">0</div><div class="stat-label">watched today</div></div>
+            <div class="stat-box"><div class="stat-num" id="statTotal">0</div><div class="stat-label">total watched</div></div>
+          </div>
+          <div class="heatmap-scroll"><div class="heatmap-grid" id="heatmapGrid"></div></div>
+          <div class="hm-legend">
+            <span>Less</span>
+            <span class="hm-cell" style="background:var(--g0)"></span>
+            <span class="hm-cell" style="background:var(--g1)"></span>
+            <span class="hm-cell" style="background:var(--g2)"></span>
+            <span class="hm-cell" style="background:var(--g3)"></span>
+            <span>More</span>
+            <span style="margin-left:8px;">· 1 lecture = dark green, 2 = light green, 3+ = brightest</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-row" style="margin-bottom:8px;">
+            <h3 style="margin:0;">Right now</h3>
+            <button onclick="toggleClockFormat()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--muted); font-size:11px; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:600;">12h / 24h</button>
+          </div>
+          <div class="widget-clock" id="clock">--:--:--</div>
+          <div class="widget-date" id="dateStr"></div>
+          <div class="weather-row" id="weatherRow"><span class="weather-icon">⏳</span><span>Getting your local weather…</span></div>
+          <div class="mini-cal">
+            <div class="mini-cal-head">
+              <button class="cal-nav-btn" onclick="calPrevMonth()">‹</button>
+              <span id="calMonthLabel"></span>
+              <button class="cal-nav-btn" onclick="calNextMonth()">›</button>
+            </div>
+            <div class="mini-cal-grid" id="calGrid"></div>
+            <button class="cal-today-btn" onclick="calGoToday()">Today</button>
+            <div class="cal-legend">
+              <span><span class="cal-swatch cal-swatch-holiday"></span>Holiday</span>
+              <span><span class="cal-swatch cal-swatch-note"></span>Your note</span>
+              <span><span class="cal-swatch cal-swatch-sun"></span>Sunday</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="dateModal" class="video-modal hidden">
+        <div class="video-modal-inner">
+          <div class="video-modal-head">
+            <span id="dateModalTitle"></span>
+            <button class="icon-btn" onclick="closeDateModal()">✕</button>
+          </div>
+          <div id="dateModalHoliday" class="date-modal-holiday"></div>
+          <textarea id="dateModalInput" placeholder="e.g. Physics test, friend's birthday…" rows="3"></textarea>
+          <div class="row-actions">
+            <button class="btn-primary" onclick="saveDateNote()">Save</button>
+            <button class="btn-ghost" id="dateModalDeleteBtn" onclick="deleteDateNote()">Delete</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="dash-grid" style="margin-bottom: 0;">
+        <div class="card">
+          <div class="card-row">
+            <h3 style="margin:0;">Productivity</h3>
+            <div style="display:flex; gap:12px; flex-wrap:wrap;">
+              <div class="toggle-btns">
+                <button id="periodWeekBtn" class="active" onclick="setChartPeriod('week')">Week</button>
+                <button id="periodMonthBtn" onclick="setChartPeriod('month')">Month</button>
+                <button id="periodYearBtn" onclick="setChartPeriod('year')">Year</button>
+              </div>
+              <div class="toggle-btns">
+                <button id="chartBarBtn" class="active" onclick="setChartType('bar')">Bar</button>
+                <button id="chartLineBtn" onclick="setChartType('line')">Line</button>
+              </div>
+            </div>
+          </div>
+          <div id="chartError" class="hint" style="display:none; text-align:center; padding:20px; color:var(--muted-2);">Chart library failed to load — check connection and refresh.</div>
+          <canvas id="prodChart" height="140"></canvas>
+        </div>
+
+        <div class="card">
+          <h3>Total progress</h3>
+          <div class="donut-wrap">
+            <div class="donut-box">
+              <div class="donut-title">Subject Split</div>
+              <svg id="donutSvg" width="100" height="100" viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="50" fill="none" stroke="var(--surface-2)" stroke-width="14"/>
+                <g id="donutSegments"></g>
+                <text x="60" y="64" text-anchor="middle" fill="var(--text)" font-family="IBM Plex Mono" font-size="14" font-weight="600" id="donutCenterText">0</text>
+              </svg>
+            </div>
+            
+            <div class="donut-box">
+              <div class="donut-title">Absolute Completion</div>
+              <svg id="donutSvgAbs" width="100" height="100" viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="50" fill="none" stroke="var(--surface-2)" stroke-width="14"/>
+                <g id="donutSegmentsAbs"></g>
+                <text x="60" y="64" text-anchor="middle" fill="var(--text)" font-family="IBM Plex Mono" font-size="14" font-weight="600" id="donutCenterTextAbs">0%</text>
+              </svg>
+            </div>
+
+            <div class="donut-legend" id="donutLegend"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-row">
+          <h3 style="margin:0;">To-do</h3>
+        </div>
+        <form onsubmit="event.preventDefault(); addTask();">
+          <input type="text" id="newTaskInput" placeholder="Add today's task…" style="width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:7px;color:var(--text);font-family:'Inter',sans-serif;font-size:13.5px;padding:9px 11px;">
+        </form>
+        <div class="todo-section" id="todoPending" style="margin-top:14px;"></div>
+        <div class="todo-section" id="todoToday" style="margin-top:14px;"></div>
+      </div>
+
+      <div class="card">
+        <h3>Customize — pick your teachers per subject</h3>
+        <div class="sub" style="margin-bottom:14px;">Any subject with more than one teacher gets a multi-select — pick everyone you actually follow (useful for subjects with separate branches, like Chemistry's Physical/Organic/Inorganic).</div>
+        <div id="prefsContainer"></div>
+      </div>
+    </section>
+
+    <!-- LIBRARY -->
+    <section class="page" id="page-library">
+      <header class="top">
+        <h1>Lecture Library</h1>
+        <div class="sub">Synced live from your Google Sheet. Mark lectures watched to track them on your dashboard.</div>
+      </header>
+      <div class="toolbar"><input type="text" id="searchBox" placeholder="Search chapter, teacher, subject…" oninput="renderList()"></div>
+      <div id="breadcrumbArea"></div>
+      <div id="listArea"><div class="loading">Syncing with Google Sheets…</div></div>
+    </section>
+
+    <!-- ABOUT -->
+    <section class="page" id="page-about">
+      <header class="top"><h1>About Me</h1></header>
+      <div class="prose">
+        <p>Hi, I'm Aniket Kumar Jha. I'm a 16-year-old student at Vikas Bharati Public School, currently navigating the Class 11 curriculum and preparing for the JEE examinations.</p>
+        <p>I built this dashboard to organize my coaching lectures, track my watch streaks, and keep my daily productivity in check so I don't fall behind on the syllabus.</p>
+        <p>Beyond academics, my real passion lies in programming. When I'm not studying physical chemistry or solving math modules, you can usually find me writing code. I enjoy turning logic into working projects—whether that's developing custom 2D arcade games in Python using Pygame, experimenting with C#, or tinkering with MySQL databases. This dashboard is just a reflection of mixing my study grind with my love for software development.</p>
+      </div>
+    </section>
+
+    <!-- CONTACT -->
+    <section class="page" id="page-contact">
+      <header class="top"><h1>Contact</h1></header>
+      <div class="contact-card">
+        
+        <h3 style="margin-top:0; margin-bottom:12px; font-family:'Fraunces', serif; font-size: 18px; color:var(--text);">Drop a message</h3>
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom: 24px;">
+          <a href="mailto:32aniket@gmail.com" style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:16px;">📧</span> 32aniket@gmail.com
+          </a>
+          <a href="mailto:codeforfun.2009@gmail.com" style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:16px;">💻</span> codeforfun.2009@gmail.com
+          </a>
+        </div>
+
+        <h3 style="margin-bottom:12px; font-family:'Fraunces', serif; font-size: 18px; color:var(--text);">Socials</h3>
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom: 24px;">
+          <a href="https://x.com/just_Aniket-911" target="_blank" rel="noopener noreferrer" style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:16px;">🐦</span> X: @just_Aniket-911
+          </a>
+          <a href="https://www.instagram.com/just.aniket_911" target="_blank" rel="noopener noreferrer" style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:16px;">📸</span> Insta: @just.aniket_911
+          </a>
+        </div>
+
+        <div style="text-align:center; padding-top: 20px; border-top: 1px solid var(--line);">
+          <div class="sub" style="margin-bottom:14px;">Scan to connect on Instagram</div>
+          <img src="just.aniket_911_qr.png" alt="Instagram QR Code" style="max-width: 180px; border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+/* ---------- Navigation ---------- */
+function showPage(name){
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelector(`.nav-item[data-page="${name}"]`).classList.add('active');
+  if (name === 'dashboard') renderDashboard();
+}
+
+/* ---------- Data source (unchanged sync) ---------- */
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTbgG6HZ46xsviW05LKLQQCmfDX8_ZXhcDN4zO-qStc12rJI20bHbYCYrIOY_7EcjMZLQ1-BBxtj2up/pub?gid=0&single=true&output=csv';
+
+let lectures = [];
+const nav = { subject: null, teacher: null, chapterBase: null };
+
+const SUBJECT_COLORS = {
+  chemistry: 'var(--chem)', physics: 'var(--phys)', maths: 'var(--math)', mathematics: 'var(--math)',
+  biology: 'var(--bio)', botany: 'var(--bio)', zoology: 'var(--bio)'
+};
+const SUBJECT_HEX = {
+  chemistry: '#4FB0A5', physics: '#9B8FE0', maths: '#E0A458', mathematics: '#E0A458',
+  biology: '#7FB069', botany: '#7FB069', zoology: '#7FB069'
+};
+function subjectColor(subject){ return SUBJECT_COLORS[(subject||'').trim().toLowerCase()] || 'var(--other)'; }
+function subjectHex(subject){ return SUBJECT_HEX[(subject||'').trim().toLowerCase()] || '#C97B63'; }
+
+function escapeAttr(s){ return (s||'').replace(/&/g,'&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+function escapeHtml(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function lectureKey(l){ return `${l.subject}|${l.teacher}|${l.chapter}|${l.lectureNo}`.toLowerCase(); }
+
+// Strips leftover mojibake and invisible emoji variation-selector chars from CSV text
+function cleanField(s){
+  if (!s) return '';
+  return s.replace(/[\uFFFD\uFE0F\u200D]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function loadLectures(){
+  Papa.parse(CSV_URL, {
+    download: true,
+    skipEmptyLines: true,
+    complete: function(results){
+      try{
+        const rows = results.data;
+        lectures = [];
+        for (let i = 1; i < rows.length; i++){
+          const r = rows[i];
+          if (!r || r.length < 3 || !r[0]) continue;
+          const teacher = cleanField(r[0]) || 'Unknown';
+          const subject = cleanField(r[1]) || 'Other';
+          const baseChapter = cleanField(r[2]) || 'Untitled';
+          const rawLec = cleanField(r[3]);
+          const date = r[4] ? r[4].trim() : '';
+          let lecNum = '', topic = '';
+          const match = rawLec.match(/Lec\s*(\d+)\s*[:\-]?\s*(.*)/i);
+          if (match){ lecNum = match[1]; topic = match[2]; } else { lecNum = rawLec; }
+          const fullChapter = topic ? `${baseChapter} — ${topic}` : baseChapter;
+          const links = [];
+          if (r[5]) links.push({ type: 'YouTube', url: r[5].trim() });
+          if (r[6]) links.push({ type: 'Notes', url: r[6].trim() });
+          if (r[7]) links.push({ type: 'DPP', url: r[7].trim() });
+          if (r[8]) links.push({ type: 'Module', url: r[8].trim() });
+          lectures.push({ id: i, teacher, subject, chapter: fullChapter, lectureNo: lecNum, date, links });
+        }
+        renderList();
+      }catch(err){
+        document.getElementById('listArea').innerHTML = `<div class="empty"><div class="big">Data Error</div><div class="error-box">Could not process spreadsheet rows: ${err.message}</div></div>`;
+        return;
+      }
+      try{ renderPrefsUI(); }catch(e){ console.error('Prefs render error:', e); }
+      try{ renderDashboard(); }catch(e){ console.error('Dashboard render error:', e); }
+    },
+    error: function(err){
+      document.getElementById('listArea').innerHTML = `<div class="empty"><div class="big">Network Error</div><div class="error-box">Could not load the URL. Please make sure the sheet is "Published to Web".<br><br>Error: ${err.message || 'Unknown network error'}</div></div>`;
+    }
+  });
+}
+
+/* ---------- Watched tracking (personal, local) ---------- */
+const WATCHED_KEY = 'lecture-watched-v1';
+const PREFS_KEY = 'subject-teacher-prefs-v1';
+
+function loadWatched(){ try{ return JSON.parse(localStorage.getItem(WATCHED_KEY)) || {}; }catch(e){ return {}; } }
+function saveWatched(w){ localStorage.setItem(WATCHED_KEY, JSON.stringify(w)); }
+function loadPrefs(){ try{ return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; }catch(e){ return {}; } }
+function savePrefs(p){ localStorage.setItem(PREFS_KEY, JSON.stringify(p)); }
+
+function toggleWatched(key){
+  const w = loadWatched();
+  if (w[key]){ delete w[key]; }
+  else { w[key] = { date: todayKey() }; }
+  saveWatched(w);
+  renderList();
+  renderDashboard();
+}
+function todayKey(d){
+  const dt = d || new Date();
+  return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
+}
+
+/* ---------- Effective (deduped) lecture set based on prefs ---------- */
+function effectiveLectures(){
+  const prefs = loadPrefs();
+  return lectures.filter(l => {
+    let pref = prefs[l.subject];
+    if (!pref) return true; // if nothing selected, show all
+    
+    // Arrays for multiple selection (like Chemistry)
+    if (Array.isArray(pref)) {
+      if (pref.length === 0) return true;
+      return pref.includes(l.teacher);
+    } 
+    // String for single selection (like Physics/Maths)
+    else {
+      return pref === l.teacher;
+    }
+  });
+}
+
+/* ---------- Library rendering (with watch toggle) ---------- */
+function chapterBaseOf(chapter){ return chapter.split(' — ')[0].trim(); }
+
+function navigateTo(level, subject, teacher, chapterBase){
+  nav.subject = subject ?? null; nav.teacher = teacher ?? null; nav.chapterBase = chapterBase ?? null;
+  document.getElementById('searchBox').value = '';
+  renderList();
+}
+
+function renderBreadcrumb(){
+  const area = document.getElementById('breadcrumbArea');
+  const search = document.getElementById('searchBox').value.trim();
+  if (search){ area.innerHTML = ''; return; }
+  const crumbs = [`<button onclick="navigateTo(null)" class="${!nav.subject ? 'current' : ''}">All subjects</button>`];
+  if (nav.subject) crumbs.push(`<span class="sep">›</span><button onclick="navigateTo(null, '${escapeAttr(nav.subject)}')" class="${nav.subject && !nav.teacher ? 'current' : ''}">${escapeHtml(nav.subject)}</button>`);
+  if (nav.teacher) crumbs.push(`<span class="sep">›</span><button onclick="navigateTo(null, '${escapeAttr(nav.subject)}', '${escapeAttr(nav.teacher)}')" class="${nav.teacher && !nav.chapterBase ? 'current' : ''}">${escapeHtml(nav.teacher)}</button>`);
+  if (nav.chapterBase) crumbs.push(`<span class="sep">›</span><button class="current">${escapeHtml(nav.chapterBase)}</button>`);
+  area.innerHTML = `<div class="breadcrumb">${crumbs.join('')}</div>`;
+}
+
+// Helper to extract the YouTube Video ID
+function getYTId(url) {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+}
+
+// Function to toggle inline video player
+function toggleVideo(containerId, ytId) {
+    const container = document.getElementById(containerId);
+    if(container.style.display === 'none') {
+        container.style.display = 'block';
+        container.innerHTML = `<iframe width="100%" height="315" src="https://www.youtube.com/embed/${ytId}?autoplay=1" frameborder="0" allowfullscreen style="border-radius:8px; margin-top:4px;"></iframe>`;
+    } else {
+        container.style.display = 'none';
+        container.innerHTML = '';
+    }
+}
+
+function renderLectureCard(l){
+  const watched = !!loadWatched()[lectureKey(l)];
+  const ytLink = l.links.find(link => link.type === 'YouTube');
+  const ytId = ytLink ? getYTId(ytLink.url) : null;
+  const containerId = `yt-${escapeAttr(lectureKey(l))}`;
+
+  return `<div class="lecture-card">
+    <div class="lec-top">
+      ${l.lectureNo ? `<div class="lec-no">L${escapeHtml(l.lectureNo)}</div>` : ''}
+      <div class="lec-body" style="display:flex; flex-direction:column; gap:8px; width:100%;">
+        <div>
+          <div class="lec-title">${escapeHtml(l.chapter)}</div>
+          <div class="lec-meta">${[l.subject, l.teacher, l.date].filter(Boolean).map(escapeHtml).join(' · ')}</div>
+        </div>
+        
+        <div class="lec-links" style="width:100%;">
+          ${(() => {
+            const youtube = l.links.find(link => link.type === 'YouTube');
+            const notes = l.links.find(link => link.type === 'Notes');
+            const dpp = l.links.find(link => link.type === 'DPP');
+            const module = l.links.find(link => link.type === 'Module');
+            const buttons = [];
+
+            if (ytId) buttons.push(`<button class="link-YouTube available" onclick="toggleVideo('${containerId}', '${ytId}')">▶ Play Here</button>`);
+            else buttons.push(`<span class="link-YouTube unavailable" title="Can't embed this video">▶ Play Here</span>`);
+
+            if (youtube) buttons.push(`<a class="link-YouTube available" href="${escapeAttr(youtube.url)}" target="_blank" rel="noopener noreferrer">YouTube ↗</a>`);
+            else buttons.push(`<span class="link-YouTube unavailable" title="No YouTube link for this lecture">YouTube ↗</span>`);
+
+            if (notes) buttons.push(`<a class="link-Notes available" href="${escapeAttr(notes.url)}" target="_blank" rel="noopener noreferrer">Notes</a>`);
+            else buttons.push(`<span class="link-Notes unavailable" title="No notes available for this lecture">Notes</span>`);
+
+            if (dpp) buttons.push(`<a class="link-DPP available" href="${escapeAttr(dpp.url)}" target="_blank" rel="noopener noreferrer" title="DPP available">DPP</a>`);
+            else buttons.push(`<span class="link-DPP unavailable" title="No DPP available for this lecture">DPP</span>`);
+
+            if (module) buttons.push(`<a class="link-Module available" href="${escapeAttr(module.url)}" target="_blank" rel="noopener noreferrer">Module</a>`);
+            else buttons.push(`<span class="link-Module unavailable" title="No module available for this lecture">Module</span>`);
+
+            buttons.push(`<button class="link-Watched ${watched?'done':''}" onclick="toggleWatched('${escapeAttr(lectureKey(l))}')">${watched ? '✓ Watched' : 'Mark watched'}</button>`);
+            return buttons.join('');
+          })()}
+        </div>
+
+      </div>
+    </div>
+    <div id="${containerId}" style="width:100%; display:none;"></div>
+  </div>`;
+}
+
+function renderList(){
+  renderBreadcrumb();
+  const area = document.getElementById('listArea');
+  const search = document.getElementById('searchBox').value.trim().toLowerCase();
+
+  if (search){
+    const filtered = lectures.filter(l => `${l.chapter} ${l.teacher} ${l.subject} ${l.lectureNo}`.toLowerCase().includes(search))
+      .sort((a,b) => (parseInt(a.lectureNo)||0) - (parseInt(b.lectureNo)||0));
+    if (filtered.length === 0){ area.innerHTML = `<div class="empty"><div class="big">No matches</div>Try a different search term.</div>`; return; }
+    area.innerHTML = `<div class="search-meta">${filtered.length} result${filtered.length!==1?'s':''}</div>` + filtered.map(renderLectureCard).join('');
+    return;
+  }
+  if (lectures.length === 0){ area.innerHTML = `<div class="empty"><div class="big">Library is empty</div>No data found. Ensure your Google Sheet has rows of data.</div>`; return; }
+
+  if (nav.subject && nav.teacher){
+    const inScope = lectures.filter(l => l.subject === nav.subject && l.teacher === nav.teacher);
+    const byChapter = {};
+    inScope.forEach(l => { const base = chapterBaseOf(l.chapter); (byChapter[base] = byChapter[base] || []).push(l); });
+    const chapterNames = Object.keys(byChapter).sort();
+    if (nav.chapterBase && byChapter[nav.chapterBase]){
+      const lecs = byChapter[nav.chapterBase].slice().sort((a,b) => (parseInt(a.lectureNo)||0) - (parseInt(b.lectureNo)||0));
+      area.innerHTML = lecs.map(renderLectureCard).join('');
+      return;
+    }
+    area.innerHTML = `<div class="tile-grid">` + chapterNames.map(ch => {
+      const count = byChapter[ch].length;
+      return `<button class="tile" onclick="navigateTo(null, '${escapeAttr(nav.subject)}', '${escapeAttr(nav.teacher)}', '${escapeAttr(ch)}')">
+        <div class="tile-top"><span class="tile-title">${escapeHtml(ch)}</span><span class="tile-arrow">›</span></div>
+        <div class="tile-meta">${count} lecture${count!==1?'s':''}</div></button>`;
+    }).join('') + `</div>`;
+    return;
+  }
+  if (nav.subject){
+    const inScope = lectures.filter(l => l.subject === nav.subject);
+    const byTeacher = {};
+    inScope.forEach(l => { (byTeacher[l.teacher] = byTeacher[l.teacher] || []).push(l); });
+    const teacherNames = Object.keys(byTeacher).sort();
+    area.innerHTML = `<div class="tile-grid">` + teacherNames.map(t => {
+      const count = byTeacher[t].length;
+      return `<button class="tile" onclick="navigateTo(null, '${escapeAttr(nav.subject)}', '${escapeAttr(t)}')">
+        <div class="tile-top"><span class="tile-dot" style="background:${subjectColor(nav.subject)}"></span><span class="tile-title">${escapeHtml(t)}</span><span class="tile-arrow">›</span></div>
+        <div class="tile-meta">${count} lecture${count!==1?'s':''}</div></button>`;
+    }).join('') + `</div>`;
+    return;
+  }
+  const bySubject = {};
+  lectures.forEach(l => { (bySubject[l.subject] = bySubject[l.subject] || []).push(l); });
+  const subjectNames = Object.keys(bySubject).sort();
+  area.innerHTML = `<div class="tile-grid">` + subjectNames.map(s => {
+    const count = bySubject[s].length;
+    return `<button class="tile" onclick="navigateTo(null, '${escapeAttr(s)}')">
+      <div class="tile-top"><span class="tile-dot" style="background:${subjectColor(s)}"></span><span class="tile-title">${escapeHtml(s)}</span><span class="tile-arrow">›</span></div>
+      <div class="tile-meta">${count} lecture${count!==1?'s':''}</div></button>`;
+  }).join('') + `</div>`;
+}
+
+/* ---------- Preferences UI ---------- */
+function renderPrefsUI(){
+  const prefs = loadPrefs();
+  const bySubject = {};
+  lectures.forEach(l => { (bySubject[l.subject] = bySubject[l.subject] || new Set()).add(l.teacher); });
+  const container = document.getElementById('prefsContainer');
+  const subjects = Object.keys(bySubject).sort();
+  if (subjects.length === 0){ container.innerHTML = '<div class="sub">No lectures loaded yet.</div>'; return; }
+
+  container.innerHTML = subjects.map(s => {
+    const teachers = [...bySubject[s]].sort();
+    if (teachers.length < 2) return '';
+
+    let selected = prefs[s] || [];
+    if (typeof selected === 'string') selected = [selected];
+    const allSelected = selected.length === 0; // empty = everyone shown
+
+    return `<div class="pref-block">
+      <div class="pref-block-head">
+        <span class="tile-dot" style="background:${subjectColor(s)}"></span>
+        <span class="pref-subject-name">${escapeHtml(s)}</span>
+        <span class="pref-count">${allSelected ? 'showing all' : `${selected.length} of ${teachers.length}`}</span>
+        <button class="pref-quick" onclick="clearPrefTeachers('${escapeAttr(s)}')">reset</button>
+      </div>
+      <div class="pref-pills">
+        ${teachers.map(t => {
+          const on = allSelected || selected.includes(t);
+          return `<button class="pref-pill ${on ? 'on' : ''}" style="${on ? `background:${subjectColor(s)};border-color:${subjectColor(s)};` : ''}" onclick="togglePrefTeacher('${escapeAttr(s)}', '${escapeAttr(t)}')">${on ? '✓ ' : ''}${escapeHtml(t)}</button>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('') || '<div class="sub">Every subject currently has just one teacher — nothing to choose yet.</div>';
+}
+
+function togglePrefTeacher(subject, teacher){
+  const prefs = loadPrefs();
+  const bySubject = {};
+  lectures.forEach(l => { (bySubject[l.subject] = bySubject[l.subject] || new Set()).add(l.teacher); });
+  const allTeachers = [...(bySubject[subject] || [])];
+
+  let current = prefs[subject] || [];
+  if (typeof current === 'string') current = [current];
+  // Nothing selected means "everyone" — starting to toggle one off means selecting everyone-except-that-one
+  if (current.length === 0) current = allTeachers.slice();
+
+  if (current.includes(teacher)){
+    current = current.filter(t => t !== teacher);
+  } else {
+    current.push(teacher);
+  }
+
+  // If every teacher ends up selected, store as empty (means "show all", auto-includes future new teachers)
+  if (current.length >= allTeachers.length){
+    delete prefs[subject];
+  } else {
+    prefs[subject] = current;
+  }
+  savePrefs(prefs);
+  renderDashboard();
+}
+
+function clearPrefTeachers(subject){
+  const prefs = loadPrefs();
+  delete prefs[subject];
+  savePrefs(prefs);
+  renderDashboard();
+}
+
+/* ---------- Dashboard: clock / date / mini calendar ---------- */
+let is12Hour = true;
+try {
+  const savedClockFormat = localStorage.getItem('clock-format-v1');
+  if (savedClockFormat !== null) {
+    is12Hour = savedClockFormat === '12';
+  }
+} catch(e) {}
+
+function toggleClockFormat() {
+  is12Hour = !is12Hour;
+  try { localStorage.setItem('clock-format-v1', is12Hour ? '12' : '24'); } catch(e) {}
+  tickClock();
+}
+
+function tickClock(){
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString([], {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: is12Hour
+  });
+  document.getElementById('dateStr').textContent = now.toLocaleDateString([], {weekday:'long', month:'long', day:'numeric', year:'numeric'});
+}
+
+/* ---------- Dashboard: navigable calendar with holidays + personal notes ---------- */
+// Approximate Indian holidays — edit this list freely to match your actual calendar.
+const HOLIDAYS = {
+  '2026-01-26': "Republic Day",
+  '2026-03-04': "Holi",
+  '2026-03-21': "Eid al-Fitr (approx.)",
+  '2026-04-14': "Ambedkar Jayanti",
+  '2026-08-15': "Independence Day",
+  '2026-08-26': "Raksha Bandhan (approx.)",
+  '2026-09-14': "Ganesh Chaturthi (approx.)",
+  '2026-10-02': "Gandhi Jayanti",
+  '2026-10-20': "Dussehra (approx.)",
+  '2026-11-08': "Diwali (approx.)",
+  '2026-12-25': "Christmas"
+};
+
+function loadDateNotes(){ try{ return JSON.parse(localStorage.getItem('calendar-notes-v1')) || {}; }catch(e){ return {}; } }
+function saveDateNotes(n){ localStorage.setItem('calendar-notes-v1', JSON.stringify(n)); }
+
+const calState = (() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() }; })();
+let dateModalKey = null;
+
+function calPrevMonth(){ calState.month--; if (calState.month < 0){ calState.month = 11; calState.year--; } renderMiniCalendar(); }
+function calNextMonth(){ calState.month++; if (calState.month > 11){ calState.month = 0; calState.year++; } renderMiniCalendar(); }
+function calGoToday(){ const n = new Date(); calState.year = n.getFullYear(); calState.month = n.getMonth(); renderMiniCalendar(); }
+
+function renderMiniCalendar(){
+  const { year, month } = calState;
+  const now = new Date();
+  const notes = loadDateNotes();
+  document.getElementById('calMonthLabel').textContent = new Date(year, month, 1).toLocaleDateString([], {month:'long', year:'numeric'});
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const grid = document.getElementById('calGrid');
+  let html = ['S','M','T','W','T','F','S'].map(d => `<span>${d}</span>`).join('');
+  for (let i=0;i<firstDay;i++) html += `<div></div>`;
+  for (let d=1; d<=daysInMonth; d++){
+    const isToday = d === now.getDate() && month === now.getMonth() && year === now.getFullYear();
+    const dow = new Date(year, month, d).getDay();
+    const key = year + '-' + String(month+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    const holidayName = HOLIDAYS[key];
+    const note = notes[key];
+    const classes = ['day'];
+    if (isToday) classes.push('today');
+    if (dow === 0) classes.push('sunday');
+    if (holidayName) classes.push('holiday');
+    if (note) classes.push('has-note');
+    const titleParts = [];
+    if (holidayName) titleParts.push(holidayName);
+    if (note) titleParts.push('Note: ' + note);
+    html += `<div class="${classes.join(' ')}" title="${escapeAttr(titleParts.join(' · '))}" onclick="openDateModal('${key}')">
+               ${d}
+               <span class="day-add-icon">+</span>
+             </div>`;
+  }
+  grid.innerHTML = html;
+}
+
+function openDateModal(key){
+  dateModalKey = key;
+  const notes = loadDateNotes();
+  const holidayName = HOLIDAYS[key];
+  const [y,m,d] = key.split('-').map(Number);
+  document.getElementById('dateModalTitle').textContent = new Date(y, m-1, d).toLocaleDateString([], {weekday:'long', month:'long', day:'numeric'});
+  document.getElementById('dateModalHoliday').textContent = holidayName ? '🟡 Holiday: ' + holidayName : '';
+  document.getElementById('dateModalInput').value = notes[key] || '';
+  document.getElementById('dateModalDeleteBtn').style.display = notes[key] ? 'inline-block' : 'none';
+  document.getElementById('dateModal').classList.remove('hidden');
+}
+function closeDateModal(){ document.getElementById('dateModal').classList.add('hidden'); dateModalKey = null; }
+function saveDateNote(){
+  const text = document.getElementById('dateModalInput').value.trim();
+  const notes = loadDateNotes();
+  if (text) notes[dateModalKey] = text; else delete notes[dateModalKey];
+  saveDateNotes(notes);
+  closeDateModal();
+  renderMiniCalendar();
+}
+function deleteDateNote(){
+  const notes = loadDateNotes();
+  delete notes[dateModalKey];
+  saveDateNotes(notes);
+  closeDateModal();
+  renderMiniCalendar();
+}
+
+/* ---------- Dashboard: weather ---------- */
+const WEATHER_ICONS = {0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',48:'🌫️',51:'🌦️',61:'🌧️',63:'🌧️',65:'🌧️',71:'🌨️',73:'🌨️',75:'❄️',80:'🌦️',95:'⛈️'};
+function iconFor(code){ return WEATHER_ICONS[code] || '🌡️'; }
+function loadWeather(){
+  const row = document.getElementById('weatherRow');
+  if (!navigator.geolocation){ row.innerHTML = '<span>Weather unavailable — location not supported</span>'; return; }
+  navigator.geolocation.getCurrentPosition(async pos => {
+    try{
+      const { latitude, longitude } = pos.coords;
+      const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`);
+      const data = await res.json();
+      const cw = data.current_weather;
+      row.innerHTML = `<span class="weather-icon">${iconFor(cw.weathercode)}</span><span>${Math.round(cw.temperature)}°C, wind ${Math.round(cw.windspeed)} km/h</span>`;
+    }catch(e){ row.innerHTML = '<span>Could not load weather</span>'; }
+  }, () => { row.innerHTML = '<span>Enable location to see local weather</span>'; });
+}
+
+/* ---------- Dashboard: heatmap ---------- */
+function renderHeatmap(){
+  const watched = loadWatched();
+  const counts = {};
+  Object.values(watched).forEach(v => { counts[v.date] = (counts[v.date]||0) + 1; });
+
+  const grid = document.getElementById('heatmapGrid');
+  grid.innerHTML = '';
+  const days = 105;
+  const today = new Date();
+  const cells = [];
+  for (let i = days-1; i >= 0; i--){
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    const key = todayKey(d);
+    const c = counts[key] || 0;
+    let color = 'var(--g0)';
+    if (c === 1) color = 'var(--g1)';
+    else if (c === 2) color = 'var(--g2)';
+    else if (c >= 3) color = 'var(--g3)';
+    cells.push(`<div class="hm-cell" style="background:${color}" title="${key}: ${c} watched"></div>`);
+  }
+  grid.innerHTML = cells.join('');
+
+  const dateKeys = Object.keys(counts).sort();
+  let bestStreak = 0, curStreak = 0, run = 0, prevDate = null;
+  dateKeys.forEach(k => {
+    const d = new Date(k);
+    if (prevDate && (d - prevDate) / 86400000 === 1) run++; else run = 1;
+    bestStreak = Math.max(bestStreak, run);
+    prevDate = d;
+  });
+  let cursor = new Date(); curStreak = 0;
+  while (counts[todayKey(cursor)]){ curStreak++; cursor.setDate(cursor.getDate()-1); }
+
+  document.getElementById('statStreak').textContent = curStreak;
+  document.getElementById('statBest').textContent = bestStreak;
+  document.getElementById('statToday').textContent = counts[todayKey()] || 0;
+  document.getElementById('statTotal').textContent = Object.keys(watched).length;
+}
+
+/* ---------- Dashboard: productivity chart ---------- */
+let prodChart = null;
+let currentChartType = 'bar';
+let currentChartPeriod = 'week';
+
+function setChartType(type){
+  currentChartType = type;
+  document.getElementById('chartBarBtn').classList.toggle('active', type==='bar');
+  document.getElementById('chartLineBtn').classList.toggle('active', type==='line');
+  renderProdChart();
+}
+
+function setChartPeriod(period){
+  currentChartPeriod = period;
+  document.getElementById('periodWeekBtn').classList.toggle('active', period==='week');
+  document.getElementById('periodMonthBtn').classList.toggle('active', period==='month');
+  document.getElementById('periodYearBtn').classList.toggle('active', period==='year');
+  renderProdChart();
+}
+
+function renderProdChart(){
+  const ctx = document.getElementById('prodChart');
+  const err = document.getElementById('chartError');
+  
+  if (typeof Chart === 'undefined'){
+    if(ctx) ctx.style.display = 'none';
+    if(err) err.style.display = 'block';
+    return;
+  } else {
+    if(ctx) ctx.style.display = 'block';
+    if(err) err.style.display = 'none';
+  }
+
+  const watched = loadWatched();
+  const counts = {};
+  Object.values(watched).forEach(v => { counts[v.date] = (counts[v.date]||0) + 1; });
+  
+  const labels = [];
+  const data = [];
+  const today = new Date();
+
+  // Handle the different time periods
+  if (currentChartPeriod === 'year') {
+    // Group by month for the last 12 months
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      labels.push(d.toLocaleDateString([], {month:'short'}));
+      
+      const monthPrefix = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      let sum = 0;
+      Object.keys(counts).forEach(k => {
+        if (k.startsWith(monthPrefix)) sum += counts[k];
+      });
+      data.push(sum);
+    }
+  } else {
+    // Week (7 days) or Month (30 days)
+    const days = currentChartPeriod === 'month' ? 30 : 7;
+    for (let i = days - 1; i >= 0; i--){
+      const d = new Date(today); 
+      d.setDate(d.getDate() - i);
+      const key = todayKey(d);
+      labels.push(d.toLocaleDateString([], {month:'short', day:'numeric'}));
+      data.push(counts[key] || 0);
+    }
+  }
+
+  if (prodChart) prodChart.destroy();
+  
+  prodChart = new Chart(ctx, {
+    type: currentChartType,
+    data: { 
+      labels, 
+      datasets: [{ 
+        label: 'Lectures watched', 
+        data, 
+        backgroundColor: '#4FB0A5', 
+        borderColor: '#4FB0A5', 
+        tension: 0.3, 
+        fill: currentChartType==='line' ? false : true 
+      }] 
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8b93a1', font: { size: 10 } }, grid: { color: '#2a2f3a' } },
+        y: { beginAtZero: true, ticks: { color: '#8b93a1', stepSize: 1 }, grid: { color: '#2a2f3a' } }
+      }
+    }
+  });
+}
+
+/* ---------- Dashboard: donut ---------- */
+function renderDonut(){
+  const watched = loadWatched();
+  const eff = effectiveLectures();
+  const watchedLectures = eff.filter(l => watched[lectureKey(l)]);
+  const total = eff.length;
+  const totalWatched = watchedLectures.length;
+
+  const bySubject = {};
+  watchedLectures.forEach(l => { bySubject[l.subject] = (bySubject[l.subject]||0) + 1; });
+  const subjects = Object.keys(bySubject).sort();
+  
+  const R = 50, C = 2 * Math.PI * R;
+
+  // 1. Original Donut (Relative Split of Watched)
+  const seg = document.getElementById('donutSegments');
+  let offset = 0;
+  seg.innerHTML = subjects.map(s => {
+    const val = bySubject[s];
+    const frac = totalWatched > 0 ? val / totalWatched : 0;
+    const len = frac * C;
+    const circle = `<circle cx="60" cy="60" r="${R}" fill="none" stroke="${subjectHex(s)}" stroke-width="14" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-offset}" transform="rotate(-90 60 60)"/>`;
+    offset += len;
+    return circle;
+  }).join('');
+  document.getElementById('donutCenterText').textContent = `${totalWatched}/${total}`;
+
+  // 2. New Donut (Absolute Progress of Total Course)
+  const segAbs = document.getElementById('donutSegmentsAbs');
+  let offsetAbs = 0;
+  segAbs.innerHTML = subjects.map(s => {
+    const val = bySubject[s];
+    const frac = total > 0 ? val / total : 0; 
+    const len = frac * C;
+    const circle = `<circle cx="60" cy="60" r="${R}" fill="none" stroke="${subjectHex(s)}" stroke-width="14" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-offsetAbs}" transform="rotate(-90 60 60)"/>`;
+    offsetAbs += len;
+    return circle;
+  }).join('');
+  const percentComplete = total > 0 ? Math.round((totalWatched / total) * 100) : 0;
+  document.getElementById('donutCenterTextAbs').textContent = `${percentComplete}%`;
+
+  // 3. Update Legend
+  const legend = document.getElementById('donutLegend');
+  const bySubjectTotal = {};
+  eff.forEach(l => { bySubjectTotal[l.subject] = (bySubjectTotal[l.subject]||0) + 1; });
+  legend.innerHTML = Object.keys(bySubjectTotal).sort().map(s => {
+    const w = bySubject[s] || 0, t = bySubjectTotal[s];
+    return `<div class="donut-legend-row"><span class="legend-dot" style="background:${subjectHex(s)}"></span>${escapeHtml(s)}: ${w}/${t}</div>`;
+  }).join('') || '<div class="sub">No subjects yet.</div>';
+}
+
+/* ---------- Dashboard master render ---------- */
+function renderDashboard(){
+  renderHeatmap();
+  renderProdChart();
+  renderDonut();
+  renderPrefsUI();
+}
+
+/* ---------- To-do widget ---------- */
+const TODO_KEY = 'todo-tasks-v1';
+const TODO_LAST_VISIT_KEY = 'todo-last-visit-v1';
+
+function loadTasks(){ try{ return JSON.parse(localStorage.getItem(TODO_KEY)) || []; }catch(e){ return []; } }
+function saveTasks(t){ localStorage.setItem(TODO_KEY, JSON.stringify(t)); }
+function uid(){ return 't_' + Date.now() + '_' + Math.random().toString(36).slice(2,7); }
+
+// Runs once per page load: anything left over from a previous day moves into "pending" (and stays there,
+// accumulating, until it's completed or deleted — no new date subdivisions get created for older pending items).
+function rolloverTasks(){
+  const today = todayKey();
+  const lastVisit = localStorage.getItem(TODO_LAST_VISIT_KEY);
+  if (lastVisit === today) return;
+  let tasks = loadTasks();
+  tasks = tasks.filter(t => !(t.bucket === 'today' && isFullyDone(t))); // drop yesterday's finished tasks
+  tasks.forEach(t => { if (t.bucket === 'today' && !isFullyDone(t)) t.bucket = 'pending'; });
+  saveTasks(tasks);
+  localStorage.setItem(TODO_LAST_VISIT_KEY, today);
+}
+function isFullyDone(t){
+  if (t.subtasks && t.subtasks.length > 0) return t.subtasks.every(s => s.done);
+  return !!t.done;
+}
+
+function addTask(){
+  const input = document.getElementById('newTaskInput');
+  const text = input.value.trim();
+  if (!text) return;
+  const tasks = loadTasks();
+  tasks.push({ id: uid(), text, done: false, subtasks: [], bucket: 'today' });
+  saveTasks(tasks);
+  input.value = '';
+  renderTodos();
+}
+function deleteTask(id){
+  saveTasks(loadTasks().filter(t => t.id !== id));
+  renderTodos();
+}
+function toggleTask(id, elId){
+  const tasks = loadTasks();
+  const t = tasks.find(x => x.id === id);
+  if (!t || (t.subtasks && t.subtasks.length > 0)) return; // parent with subtasks can't be checked directly
+  if (!t.done){
+    t.done = true;
+    saveTasks(tasks);
+    playCutAnimation(elId, () => renderTodos());
+  } else {
+    t.done = false;
+    saveTasks(tasks);
+    renderTodos();
+  }
+}
+function addSubtaskPrompt(taskId){
+  const container = document.getElementById('subInput_' + taskId);
+  container.style.display = container.style.display === 'none' ? 'block' : 'none';
+  if (container.style.display === 'block') container.querySelector('input').focus();
+}
+function addSubtask(taskId, inputEl){
+  const text = inputEl.value.trim();
+  if (!text) return;
+  const tasks = loadTasks();
+  const t = tasks.find(x => x.id === taskId);
+  t.subtasks.push({ id: uid(), text, done: false });
+  saveTasks(tasks);
+  renderTodos();
+}
+function deleteSubtask(taskId, subId){
+  const tasks = loadTasks();
+  const t = tasks.find(x => x.id === taskId);
+  t.subtasks = t.subtasks.filter(s => s.id !== subId);
+  saveTasks(tasks);
+  renderTodos();
+}
+
+// FIXED: Parent properly updates without freezing!
+function toggleSubtask(taskId, subId, elId){
+  const tasks = loadTasks();
+  const t = tasks.find(x => x.id === taskId);
+  const s = t.subtasks.find(x => x.id === subId);
+  
+  if (!s.done){
+    s.done = true;
+    saveTasks(tasks);
+    
+    // Play the subtask animation first
+    playCutAnimation(elId, () => {
+      
+      // Check if that was the last subtask needed to complete the parent
+      const updatedTasks = loadTasks();
+      const parent = updatedTasks.find(x => x.id === taskId);
+      
+      if (parent && isFullyDone(parent)){
+        // If parent is done, play the parent animation, THEN render everything
+        playCutAnimation('taskText_' + taskId, () => {
+          renderTodos();
+        });
+      } else {
+        // Otherwise, just render the subtask check
+        renderTodos();
+      }
+    });
+  } else {
+    s.done = false;
+    saveTasks(tasks);
+    renderTodos();
+  }
+}
+
+function playCutAnimation(elId, done){
+  const el = document.getElementById(elId);
+  if (!el){ done(); return; }
+  el.classList.add('cut');
+  el.insertAdjacentHTML('beforeend', '<span class="strike-line"></span><span class="scissors">✂️</span>');
+  setTimeout(done, 480);
+}
+
+function renderTaskRow(t){
+  const complete = isFullyDone(t);
+  const hasSubs = t.subtasks && t.subtasks.length > 0;
+  const textId = 'taskText_' + t.id;
+  const checkHtml = hasSubs
+    ? `<div class="todo-check ${complete?'done':''}" style="cursor:default;">${complete?'✓':''}</div>`
+    : `<div class="todo-check ${t.done?'done':''}" onclick="toggleTask('${t.id}','${textId}')">${t.done?'✓':''}</div>`;
+
+  return `<div class="todo-item">
+    <div class="todo-row">
+      ${checkHtml}
+      <span class="todo-text ${complete?'cut':''}" id="${textId}">${escapeHtml(t.text)}</span>
+      <button class="todo-del" onclick="deleteTask('${t.id}')" title="Delete">✕</button>
+    </div>
+    ${!hasSubs ? `<button class="todo-add-sub" onclick="addSubtaskPrompt('${t.id}')">+ add sub-task</button>
+      <div id="subInput_${t.id}" style="display:none;">
+        <input class="todo-sub-input" type="text" placeholder="Sub-task…" onkeydown="if(event.key==='Enter'){addSubtask('${t.id}', this); this.value='';}">
+      </div>` : ''}
+    ${hasSubs ? `<div class="todo-subs">
+      ${t.subtasks.map(s => {
+        const subTextId = 'subText_' + s.id;
+        return `<div class="todo-sub-row">
+          <div class="todo-check ${s.done?'done':''}" onclick="toggleSubtask('${t.id}','${s.id}','${subTextId}')">${s.done?'✓':''}</div>
+          <span class="todo-text ${s.done?'cut':''}" id="${subTextId}">${escapeHtml(s.text)}</span>
+          <button class="todo-del" onclick="deleteSubtask('${t.id}','${s.id}')" title="Delete">✕</button>
+        </div>`;
+      }).join('')}
+      <button class="todo-add-sub" onclick="addSubtaskPrompt('${t.id}')">+ add sub-task</button>
+      <div id="subInput_${t.id}" style="display:none;">
+        <input class="todo-sub-input" type="text" placeholder="Sub-task…" onkeydown="if(event.key==='Enter'){addSubtask('${t.id}', this); this.value='';}">
+      </div>
+    </div>` : ''}
+  </div>`;
+}
+
+function renderTodos(){
+  const tasks = loadTasks();
+  const pending = tasks.filter(t => t.bucket === 'pending');
+  const today = tasks.filter(t => t.bucket === 'today');
+
+  const pendingEl = document.getElementById('todoPending');
+  pendingEl.innerHTML = pending.length
+    ? `<div class="todo-section-label">Pending</div>${pending.map(renderTaskRow).join('')}`
+    : '';
+
+  const todayEl = document.getElementById('todoToday');
+  todayEl.innerHTML = `<div class="todo-section-label">Today</div>` +
+    (today.length ? today.map(renderTaskRow).join('') : '<div class="todo-empty">Nothing added yet.</div>');
+}
+
+/* ---------- Init ---------- */
+tickClock();
+setInterval(tickClock, 1000);
+renderMiniCalendar();
+loadWeather();
+rolloverTasks();
+renderTodos();
+loadLectures();
+</script>
+</body>
+</html>
