@@ -14,7 +14,7 @@ const RETRY_DELAY_MS = 1000;       // doubles each retry
 
 // Backup provider (free): get a key at https://openrouter.ai/keys
 // "openrouter/free" automatically picks a free model that supports images.
-const OPENROUTER_API_KEY = "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";
+const OPENROUTER_API_KEY = "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";
 const OPENROUTER_MODEL = "openrouter/free";
 
 function apiUrl(model) {
